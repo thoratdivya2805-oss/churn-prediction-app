@@ -56,6 +56,20 @@ if uploaded_file is not None:
     # ---------- Results Table ----------
     st.subheader("Prediction Results")
     st.dataframe(results)
+ # ---------- Dashboard Overview ----------
+st.subheader("📈 Customer Overview")
+
+total_customers = len(results)
+churned_customers = (results["Churn_Prediction"] == "Yes").sum()
+active_customers = (results["Churn_Prediction"] == "No").sum()
+churn_rate = (churned_customers / total_customers * 100) if total_customers > 0 else 0
+
+c1, c2, c3, c4 = st.columns(4)
+
+c1.metric("Total Customers", total_customers)
+c2.metric("Churned Customers", churned_customers)
+c3.metric("Active Customers", active_customers)
+c4.metric("Churn Rate", f"{churn_rate:.1f}%")
 
     # ---------- Summary Metrics ----------
     col1, col2, col3 = st.columns(3)
