@@ -56,7 +56,7 @@ if uploaded_file is not None:
     # ---------- Results Table ----------
     st.subheader("Prediction Results")
     st.dataframe(results)
- # ---------- Dashboard Overview ----------
+# ---------- Dashboard Overview ----------
 st.subheader("📈 Customer Overview")
 
 total_customers = len(results)
