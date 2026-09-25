@@ -71,25 +71,24 @@ c2.metric("Churned Customers", churned_customers)
 c3.metric("Active Customers", active_customers)
 c4.metric("Churn Rate", f"{churn_rate:.1f}%")
 
-    # ---------- Summary Metrics ----------
-    col1, col2, col3 = st.columns(3)
-    col1.metric("High Risk", (results["Risk_Level"] == "High Risk").sum())
-    col2.metric("Medium Risk", (results["Risk_Level"] == "Medium Risk").sum())
-    col3.metric("Low Risk", (results["Risk_Level"] == "Low Risk").sum())
-
-    # ---------- Pie Chart ----------
-    st.subheader("Risk Distribution")
-    risk_counts = results["Risk_Level"].value_counts()
-    fig, ax = plt.subplots()
-    colors = {"High Risk": "#e74c3c", "Medium Risk": "#f39c12", "Low Risk": "#2ecc71"}
-    ax.pie(
-        risk_counts,
-        labels=risk_counts.index,
-        autopct="%1.1f%%",
-        colors=[colors[r] for r in risk_counts.index],
-        startangle=90,
-    )
-    st.pyplot(fig)
+# ---------- Summary Metrics ----------
+col1, col2, col3 = st.columns(3)
+col1.metric("High Risk", (results["Risk_Level"] == "High Risk").sum())
+col2.metric("Medium Risk", (results["Risk_Level"] == "Medium Risk").sum())
+col3.metric("Low Risk", (results["Risk_Level"] == "Low Risk").sum())
+# ---------- Pie Chart ----------
+st.subheader("Risk Distribution")
+risk_counts = results["Risk_Level"].value_counts()
+fig, ax = plt.subplots()
+colors = {"High Risk": "#e74c3c", "Medium Risk": "#f39c12", "Low Risk": "#2ecc71"}
+ax.pie(
+risk_counts,
+labels=risk_counts.index,
+autopct="%1.1f%%",
+colors=[colors[r] for r in risk_counts.index],
+startangle=90,
+)
+st.pyplot(fig)
 
     # ---------- Download Results ----------
     csv = results.to_csv(index=False).encode("utf-8")
