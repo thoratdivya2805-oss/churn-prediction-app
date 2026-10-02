@@ -90,13 +90,13 @@ startangle=90,
 )
 st.pyplot(fig)
 
-    # ---------- Download Results ----------
-    csv = results.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download Predictions as CSV",
-        data=csv,
-        file_name="churn_predictions.csv",
-        mime="text/csv",
-    )
+# ---------- Download Results ----------
+csv = results.to_csv(index=False).encode("utf-8")
+st.download_button(
+"Download Predictions as CSV",
+data=csv,
+file_name="churn_predictions.csv",
+mime="text/csv",
+)
 else:
     st.info("Please upload a CSV file to get started.")
