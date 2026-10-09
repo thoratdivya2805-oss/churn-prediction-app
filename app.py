@@ -1,103 +1,128 @@
-
-import streamlit as st
-import pandas as pd
+from pathlib import Path
 import joblib
+import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
 
+ROOT = Path(__file__).resolve().parent
 
+# Support both layouts: model files in the repository root OR in a models/ folder.
+def find_model_file(filename):
+    for candidate in (ROOT / filename, ROOT / "models" / filename):
+        if candidate.exists():
+            return candidate
+    return None
 
- 
+MODEL_PATH = find_model_file("churn_model.pkl")
+COLUMNS_PATH = find_model_file("model_columns.pkl")
 
-
-# ---------- Page Config ----------
-st.set_page_config(page_title="Customer Churn Prediction", layout="wide")
+st.set_page_config(page_title="Customer Churn Prediction", page_icon="📊", layout="wide")
 st.title("📊 AI-Powered Customer Churn Prediction")
-st.write("Upload customer data to predict churn risk.")
+st.caption("Final-year project prototype | Upload a customer CSV to estimate churn risk.")
+st.warning("Predictions are estimates, not guarantees. Use columns compatible with the training dataset.")
 
-# ---------- Load Model ----------
 @st.cache_resource
 def load_model():
-    model = joblib.load("churn_model.pkl")
-    columns = joblib.load("model_columns.pkl")
-    return model, columns
+    if MODEL_PATH is None or COLUMNS_PATH is None:
+        return None, None
+    return joblib.load(MODEL_PATH), joblib.load(COLUMNS_PATH)
 
 model, model_columns = load_model()
+if model is None:
+    st.error(
+        "Trained model files were not found. Add both churn_model.pkl and "
+        "model_columns.pkl either beside app.py or inside a models/ folder."
+    )
+    st.stop()
 
-# ---------- File Upload ----------
-uploaded_file = st.file_uploader("Upload Customer CSV File", type=["csv"])
+uploaded_file = st.file_uploader("Upload customer CSV", type=["csv"])
+if uploaded_file is None:
+    st.info("Upload a CSV file to see customer preview and predictions.")
+    st.subheader("Project workflow")
+    st.write("CSV upload → preprocessing → ML prediction → risk summary → downloadable results")
+    st.stop()
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.subheader("Uploaded Data Preview")
-    st.dataframe(df.head())
+try:
+    raw_df = pd.read_csv(uploaded_file)
+except Exception as exc:
+    st.error(f"Could not read CSV: {exc}")
+    st.stop()
 
-    # ---------- Preprocessing ----------
-    df_processed = pd.get_dummies(df)
+if raw_df.empty:
+    st.error("The uploaded CSV is empty.")
+    st.stop()
 
-    # Align columns with training data (add missing cols as 0, drop extra cols)
-    df_processed = df_processed.reindex(columns=model_columns, fill_value=0)
+st.subheader("👥 Customer Data Preview")
+st.dataframe(raw_df.head(10), use_container_width=True)
 
-    # ---------- Predictions ----------
-    probs = model.predict_proba(df_processed)[:, 1]
-    preds = model.predict(df_processed)
+# Keep only the feature columns used for training, in the original training order.
+X = raw_df.reindex(columns=model_columns)
 
-    def risk_level(prob):
-        if prob >= 0.7:
-            return "High Risk"
-        elif prob >= 0.4:
-            return "Medium Risk"
-        else:
-            return "Low Risk"
+try:
+    predictions = model.predict(X)
+    probabilities_all = model.predict_proba(X)
+    classes = list(model.classes_)
+    # Find probability corresponding to class 1 (churn); fall back safely if class 1 is absent.
+    if 1 in classes:
+        churn_index = classes.index(1)
+    else:
+        churn_index = len(classes) - 1
+    probabilities = probabilities_all[:, churn_index]
+except Exception as exc:
+    st.error(
+        "Prediction failed. The uploaded CSV must contain the same feature columns "
+        "and compatible data types as the training dataset."
+    )
+    st.code(str(exc))
+    st.stop()
 
-    results = df.copy()
-    results["Churn_Prediction"] = ["Yes" if p == 1 else "No" for p in preds]
-    results["Churn_Probability"] = probs.round(2)
-    results["Risk_Level"] = [risk_level(p) for p in probs]
+def risk_level(probability):
+    if probability >= 0.70:
+        return "High Risk"
+    if probability >= 0.40:
+        return "Medium Risk"
+    return "Low Risk"
 
-    # ---------- Results Table ----------
-    st.subheader("Prediction Results")
-    st.dataframe(results)
-# ---------- Dashboard Overview ----------
-st.subheader("📈 Customer Overview")
+results = raw_df.copy()
+results["Churn Prediction"] = ["Yes" if int(p) == 1 else "No" for p in predictions]
+results["Churn Probability (%)"] = (probabilities * 100).round(2)
+results["Risk Level"] = [risk_level(float(p)) for p in probabilities]
 
-total_customers = len(results)
-churned_customers = (results["Churn_Prediction"] == "Yes").sum()
-active_customers = (results["Churn_Prediction"] == "No").sum()
-churn_rate = (churned_customers / total_customers * 100) if total_customers > 0 else 0
+st.subheader("🔮 Prediction Results")
+st.dataframe(results, use_container_width=True)
 
-c1, c2, c3, c4 = st.columns(4)
+total = len(results)
+churn_count = int((predictions == 1).sum())
+active_count = total - churn_count
+churn_rate = (churn_count / total * 100) if total else 0.0
 
-c1.metric("Total Customers", total_customers)
-c2.metric("Churned Customers", churned_customers)
-c3.metric("Active Customers", active_customers)
-c4.metric("Churn Rate", f"{churn_rate:.1f}%")
+a, b, c, d = st.columns(4)
+a.metric("Total Customers", total)
+b.metric("Predicted Churn", churn_count)
+c.metric("Predicted Not Churning", active_count)
+d.metric("Predicted Churn Rate", f"{churn_rate:.1f}%")
 
-# ---------- Summary Metrics ----------
-col1, col2, col3 = st.columns(3)
-col1.metric("High Risk", (results["Risk_Level"] == "High Risk").sum())
-col2.metric("Medium Risk", (results["Risk_Level"] == "Medium Risk").sum())
-col3.metric("Low Risk", (results["Risk_Level"] == "Low Risk").sum())
-# ---------- Pie Chart ----------
-st.subheader("Risk Distribution")
-risk_counts = results["Risk_Level"].value_counts()
+st.subheader("⚠️ Risk Summary")
+risk_counts = results["Risk Level"].value_counts().reindex(
+    ["High Risk", "Medium Risk", "Low Risk"], fill_value=0
+)
+r1, r2, r3 = st.columns(3)
+r1.metric("High Risk", int(risk_counts["High Risk"]))
+r2.metric("Medium Risk", int(risk_counts["Medium Risk"]))
+r3.metric("Low Risk", int(risk_counts["Low Risk"]))
+
+st.subheader("📈 Risk Distribution")
 fig, ax = plt.subplots()
-colors = {"High Risk": "#e74c3c", "Medium Risk": "#f39c12", "Low Risk": "#2ecc71"}
-ax.pie(
-risk_counts,
-labels=risk_counts.index,
-autopct="%1.1f%%",
-colors=[colors[r] for r in risk_counts.index],
-startangle=90,
-)
+ax.pie(risk_counts.values, labels=risk_counts.index, autopct="%1.1f%%", startangle=90)
+ax.axis("equal")
 st.pyplot(fig)
+plt.close(fig)
 
-# ---------- Download Results ----------
-csv = results.to_csv(index=False).encode("utf-8")
 st.download_button(
-"Download Predictions as CSV",
-data=csv,
-file_name="churn_predictions.csv",
-mime="text/csv",
+    "⬇️ Download prediction results (CSV)",
+    data=results.to_csv(index=False).encode("utf-8"),
+    file_name="churn_predictions.csv",
+    mime="text/csv",
 )
-else:
-    st.info("Please upload a CSV file to get started.")
+
+ 
